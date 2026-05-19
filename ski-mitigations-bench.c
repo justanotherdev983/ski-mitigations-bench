@@ -167,6 +167,44 @@ size_t fetch_dmips(const char *file_path, double *out, size_t max) {
 	return n;
 }
 
+static size_t count_dmips(const char *path)
+{
+	FILE *fd;
+	char line[1024];
+	size_t n = 0;
+
+	fd = fopen(path, "r");
+	if (!fd)
+		return 0;
+
+	while (fgets(line, sizeof(line), fd)) {
+		if (strstr(line, "DMIPS:"))
+			n++;
+	}
+
+	fclose(fd);
+	return n;
+}
+
+
+bench_phase fetch_phase(const char *outdir, size_t n_runs) {
+	char path[PATH_MAX];
+
+	snprintf(path, sizeof(path), "%s/base.log", outdir);
+	if (count_dmips(path) < n_runs)
+		return PHASE_BASE;
+
+	snprintf(path, sizeof(path), "%s/mit_off.log", outdir);
+	if (count_dmips(path) < n_runs)
+		return PHASE_MITOFF;
+
+	return PHASE_DONE;
+}
+
+void calc_joined_stats(bench_phase phase) {
+	return;
+}
+
 
 double calc_welch_p_val(const computed_stats *base_stats, const computed_stats *mitoff_stats) {
 
