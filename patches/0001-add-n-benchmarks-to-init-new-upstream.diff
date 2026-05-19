@@ -1,0 +1,18 @@
+--- env/mnt/init.vanilla	2026-05-16 13:35:59.091669108 +0000
++++ env/mnt/init	2026-05-16 13:36:54.363282863 +0000
+@@ -102,6 +102,15 @@
+ export SHELL=/bin/bash
+ export HOME=/root
+ 
++_bench=$(grep -oP "\bBENCH_RUNS=\K[0-9]+" /proc/cmdline || true)
++if [[ -n "$_bench" ]]; then
++	for _i in $(seq 1 "$_bench"); do
++		/root/git-projects/dhrystone/dhrystone
++	done
++	echo o > /proc/sysrq-trigger
++	exit 0
++fi
++
+ _run_test=$( grep -o '\brun_test=[^ ]*' /proc/cmdline | cut -d '=' -f2 )
+ 
+ if [[ $_run_test -eq 1 ]]; then
