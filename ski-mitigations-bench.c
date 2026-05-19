@@ -376,7 +376,7 @@ pid_t bski_runner(const bski_config* config, const char *out) {
 		char buf[4096];
 		ssize_t n;
 
-		fd = open(out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		fd = open(out, O_WRONLY | O_CREAT | O_APPEND, 0644);
 		if (fd < 0) {
 			perror("open");
 			_exit(1);
