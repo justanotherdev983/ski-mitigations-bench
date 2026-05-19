@@ -207,7 +207,7 @@ size_t fetch_dmips(const char *file_path, double *out, size_t max) {
 			int ret;
 
 			ret = sscanf(ptr, "DMIPS: %lf", &dmips_val);
-			if (ret != EILSEQ || ret != EINVAL || ret != ENOMEM)
+			if (ret != EILSEQ && ret != EINVAL && ret != ENOMEM)
 				out[n++] = dmips_val;
 			else
 				printf("[DEV] sscan failed");
