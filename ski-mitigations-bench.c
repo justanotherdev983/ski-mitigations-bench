@@ -18,13 +18,19 @@
 #include <errno.h>
 
 // TODO: not make this hardcoded
-#define PATH_ROOT 		"/home/test/test"
-#define PATH_BSKI 		"/home/test/ski/src/bski"
-#define PATH_SKI_BOOTLOADER 	"/home/test/ski/ski-bootloader/ski-bootloader"
-#define PATH_VMLINUX		"/home/test/linux-ia64/vmlinux"
+#define PATH_ROOT 		"/home/test/test/"
+#define PATH_BSKI 		"bin/bski"
+#define PATH_SKI_BOOTLOADER 	"bin/ski-bootloader"
+#define PATH_VMLINUX		"bin/vmlinux"
 #define SKI_BOOT_ARGS		"PATH_SKI_BOOTLOADER PATH_VMLINUX root=/dev/sda simscsi=./sd init=/init" \
 							"PATH=/bin:/sbin:/usr/bin:/usr/sbin rw nomca N_RUNS"
 #define BSKI_ARGV_MAX_SIZE 32
+
+typedef enum {
+	PHASE_BASE,
+	PHASE_MITOFF,
+	PHASE_DONE,
+} bench_phase;
 
 typedef struct {
 	double mean;
@@ -43,6 +49,23 @@ typedef struct {
 	size_t idx;
 	char *option;
 } argv_ctx;
+
+typedef struct {
+	bski_config base_conf;
+	bski_config mitoff_conf;
+
+	computed_stats base_stats;
+	computed_stats mitoff_stats;
+
+	argv_ctx argv_ctx;
+
+	char* n_runs_str;
+	uint64_t n_runs;
+	char *user_root_path;
+
+
+	bench_phase phase;
+} ski_bench_ctx;
 
 bool argv_contains(argv_ctx *ctx, char **argv, char *str) {
 
