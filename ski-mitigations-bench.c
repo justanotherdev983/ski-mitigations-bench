@@ -428,9 +428,12 @@ void bski_kill(pid_t pid, uint64_t n_runs) {
 	waitpid(pid, NULL, 0);
 }
 
-void run_base(const bski_config *config, uint64_t n_runs, const char *outdir) {
+void run_base(const bski_config *config, uint64_t n_runs, const char *outdir, bench_phase phase) {
 	pid_t pid;
 	char path[PATH_MAX];
+
+	if (phase == PHASE_DONE)
+		return;
 
 	snprintf(path, sizeof(path), "%s/base.log", outdir);
 	pid = bski_runner(config, path);
@@ -438,9 +441,12 @@ void run_base(const bski_config *config, uint64_t n_runs, const char *outdir) {
 	bski_kill(pid, n_runs);
 }
 
-void run_mitigations_off(const bski_config *config, uint64_t n_runs, const char *outdir) {
+void run_mitigations_off(const bski_config *config, uint64_t n_runs, const char *outdir, bench_phase phase) {
 	pid_t pid;
 	char path[PATH_MAX];
+
+	if (phase == PHASE_DONE)
+		return;
 
 	snprintf(path, sizeof(path), "%s/mit_off.log", outdir);
 	pid = bski_runner(config, path);
@@ -448,29 +454,101 @@ void run_mitigations_off(const bski_config *config, uint64_t n_runs, const char 
 	bski_kill(pid, n_runs);
 }
 
+void run_resume(bski_config *base_conf, bski_config *mitoff_conf, size_t n_runs,
+		const char *root_dir, bench_phase *phase) {
+	const char *latest_outdir = get_latest_outdir(".");
+
+	char path[PATH_MAX];
+	size_t counted_n_dmips;
+
+
+	switch (*phase) {
+		case PHASE_BASE:
+			snprintf(path, sizeof(path), "%s/base.log", latest_outdir);
+			counted_n_dmips = count_dmips(path);
+
+			for (int i = 0; base_conf->argv[i] != NULL; i++) {
+				if (strncmp(base_conf->argv[i], "BENCH_RUNS=", 11) == 0) {
+					snprintf(base_conf->argv[i], 64, "BENCH_RUNS=%zu",
+								n_runs - counted_n_dmips);
+					break;
+				}
+			}
+
+			run_base(base_conf, n_runs - counted_n_dmips, latest_outdir, *phase);
+			run_mitigations_off(mitoff_conf, n_runs, latest_outdir, *phase);
+
+			calc_joined_stats(PHASE_BASE);
+
+			break;
+
+		case PHASE_MITOFF:
+			snprintf(path, sizeof(path), "%s/mit_off.log", latest_outdir);
+			counted_n_dmips = count_dmips(path);
+
+			for (int i = 0; mitoff_conf->argv[i] != NULL; i++) {
+				if (strncmp(mitoff_conf->argv[i], "BENCH_RUNS=", 11) == 0) {
+					snprintf(mitoff_conf->argv[i], 64, "BENCH_RUNS=%zu",
+								n_runs - counted_n_dmips);
+					break;
+				}
+			}
+
+			run_mitigations_off(mitoff_conf, n_runs - counted_n_dmips, latest_outdir,
+					*phase); //idk if latest_outdir?
+
+			calc_joined_stats(PHASE_MITOFF);
+
+			break;
+
+		case PHASE_DONE:
+			printf("[USR] Already done with both phases");
+
+			break;
+
+		default:
+			printf("[DEV] Invalid bench phase");
+
+			break;
+
+	}
+
+	*phase = PHASE_DONE;
+
+	return;
+}
+
 int main(int argc, char** argv) {
-	char* n_runs_str;
-	uint64_t n_runs;
 
+	ski_bench_ctx ctx = {0};
 	char bench_runs_arg[64];
+	char outdir[PATH_MAX];
 
-	computed_stats base_stats;
-	computed_stats mitoff_stats;
+	char env_path[PATH_MAX];
 
-	if (argc < 2)
-		n_runs_str = "1000";
-	else
-		n_runs_str = argv[1];
+	if (argv_contains(&ctx.argv_ctx, argv, "-n")) {
+		// todo, get the num of jobs and use pthread so we compare multi and single also
+		ctx.n_runs_str = argv_get_next_str(&ctx.argv_ctx, argv); // TODO: sanitize user input, this is bad
+	} else {
+		ctx.n_runs_str = "1000";
+		printf("[USR] No N (amount of runs) has been selected, "
+				"defaulting to: %s", ctx.n_runs_str);
+	}
 
-	n_runs = strtol(n_runs_str, NULL, 0);
+	snprintf(bench_runs_arg, sizeof(bench_runs_arg), "BENCH_RUNS=%s", ctx.n_runs_str);
 
+	ctx.user_root_path = PATH_ROOT;
+	if (argv_contains(&ctx.argv_ctx, argv, "--root")) {
+		ctx.user_root_path = argv_get_next_str(&ctx.argv_ctx, argv); // TODO: sanitize user input, this is bad
+								      // TODO: impl
+	}
 
-	snprintf(bench_runs_arg, sizeof(bench_runs_arg), "BENCH_RUNS=%s", n_runs_str);
+	snprintf(env_path, sizeof(env_path), "%s/env", ctx.user_root_path);
 
-	bski_config base_config = {
-		.path = PATH_BSKI,
+	ctx.base_conf = (bski_config){
+		.path = "bin/bski", // i dont like this
 		.argv = {
-			PATH_BSKI,
+			"bski", // i dont like this
 			"-noconsole",
 			PATH_SKI_BOOTLOADER,
 			PATH_VMLINUX,
@@ -484,47 +562,50 @@ int main(int argc, char** argv) {
 		},
 	};
 
-	bski_config mitoff_config = base_config;
-	bski_append_argv(&mitoff_config, "mitigations=off");
+	ctx.mitoff_conf = ctx.base_conf;
+	bski_append_argv(&ctx.mitoff_conf, "mitigations=off");
 
-	print_welcome(n_runs_str, n_runs);
-
-
-	argv_ctx ctx;
-	if (argv_contains(&ctx, argv, "--tmp"))
-		chdir("/tmp");
-
-	chdir(PATH_ROOT); // XXX: Hacky, see below
-	char outdir[PATH_MAX];
-        time_t now = time(NULL);
-        strftime(outdir, sizeof(outdir), "ski-bench-output-%Y%m%d_%H%M%S", localtime(&now));
-	mkdir(outdir, 0755);
-
-	if (argv_contains(&ctx, argv, "--resume")) {
-		// todo, search for the newest outdir and get the latest N
-		// and continue from last gotten DMIPS after new ski boot and BENCH_RUNS - latest N
-	}
-
-	if (argv_contains(&ctx, argv, "--multi")) {
+	ctx.n_runs = strtol(ctx.n_runs_str, NULL, 0);
+	if (argv_contains(&ctx.argv_ctx, argv, "--multi")) {
 		// todo, get the num of jobs and use pthread so we compare multi and single also
 	}
 
-	if (argv_contains(&ctx, argv, "--root")) {
-		char *user_root_path = argv_get_next_str(&ctx, argv); // TODO: sanitize user input, this is bad
-								      // TODO: impl
+	chdir(env_path);
+
+	if (argv_contains(&ctx.argv_ctx, argv, "--resume")) {
+		// todo, search for the newest outdir and get the latest N
+		// and continue from last gotten DMIPS after new ski boot and BENCH_RUNS - latest N
+		// (const char *file_path, double *out, size_t max)
+
+		const char *latest_outdir_path = get_latest_outdir(".");
+		ctx.phase = fetch_phase(latest_outdir_path, ctx.n_runs);
+		run_resume(&ctx.base_conf, &ctx.mitoff_conf, ctx.n_runs, env_path, &ctx.phase);
 	}
 
-	run_base(&base_config, n_runs, outdir);
-	run_mitigations_off(&mitoff_config, n_runs, outdir);
+	if (argv_contains(&ctx.argv_ctx, argv, "--tmp"))
+		chdir("/tmp");
 
-	double p_val = calc_stats(&base_stats, &mitoff_stats, outdir, n_runs);
+			print_welcome(ctx.n_runs_str, ctx.n_runs);
+
+
+	if (ctx.phase != PHASE_DONE) {
+		time_t now = time(NULL);
+		strftime(outdir, sizeof(outdir), "ski-bench-output-%Y%m%d_%H%M%S", localtime(&now));
+		mkdir(outdir, 0755);
+	}
+
+	run_base(&ctx.base_conf, ctx.n_runs, outdir, ctx.phase);
+	run_mitigations_off(&ctx.mitoff_conf, ctx.n_runs, outdir, ctx.phase);
+
+	const char *print_outdir = get_latest_outdir(".");
+
+	double p_val = calc_stats(&ctx.base_stats, &ctx.mitoff_stats, print_outdir, ctx.n_runs);
 
 	char print_results_log_path[PATH_MAX];
 	snprintf(print_results_log_path, sizeof(print_results_log_path),
-			"%s/results.log", outdir);
+			"%s/results.log", print_outdir);
 
-
-	pretty_print_stats(&base_stats, &mitoff_stats, print_results_log_path, n_runs, p_val);
+	pretty_print_stats(&ctx.base_stats, &ctx.mitoff_stats, print_results_log_path, ctx.n_runs, p_val);
 
 	return 0;
 
