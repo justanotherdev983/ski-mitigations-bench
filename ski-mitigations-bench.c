@@ -138,7 +138,7 @@ void pretty_print_stats(const computed_stats *base_stats, const computed_stats *
 size_t fetch_dmips(const char *file_path, double *out, size_t max) {
 
 	FILE *fd;
-	char line[512]; // TODO: this will overflow
+	char line[1024]; // TODO: this will overflow
 
 	size_t n = 0;
 
@@ -152,8 +152,13 @@ size_t fetch_dmips(const char *file_path, double *out, size_t max) {
 		char *ptr = strstr(line, "DMIPS:");
 		if (ptr) {
 			double dmips_val;
-			if (sscanf(ptr, "DMIPS: %lf", &dmips_val))
+			int ret;
+
+			ret = sscanf(ptr, "DMIPS: %lf", &dmips_val);
+			if (ret != EILSEQ || ret != EINVAL || ret != ENOMEM)
 				out[n++] = dmips_val;
+			else
+				printf("[DEV] sscan failed");
 
 		}
 	}
