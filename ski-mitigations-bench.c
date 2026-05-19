@@ -60,8 +60,37 @@ bool argv_contains(argv_ctx *ctx, char **argv, char *str) {
 char *argv_get_next_str(argv_ctx *ctx, char **argv) {
 
 	return argv[++ctx->idx];
+
 }
 
+char *get_latest_outdir(const char *root_dir) {
+	DIR *dir;
+	struct dirent *entry;
+	static char latest[PATH_MAX];
+	char best[NAME_MAX] = {0};
+
+	dir = opendir(root_dir);
+	if (!dir) {
+		perror("opendir");
+		return NULL;
+	}
+
+	while ((entry = readdir(dir)) != NULL) {
+		if (strncmp(entry->d_name, "ski-bench-output-", 17) != 0)
+			continue;
+		if (strcmp(entry->d_name, best) > 0)
+			snprintf(best, sizeof(best), "%s", entry->d_name);
+	}
+
+	closedir(dir);
+
+	if (best[0] == '\0')
+		return NULL;
+
+	snprintf(latest, sizeof(latest), "%s/%s", root_dir, best);
+
+	return latest;
+}
 
 void print_welcome(char* n_runs_str, uint64_t n_runs) {
 	size_t estimated_total_secs;
