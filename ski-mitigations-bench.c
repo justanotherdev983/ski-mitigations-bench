@@ -14,6 +14,8 @@
 #include <time.h>
 #include <linux/limits.h>
 #include <fcntl.h>
+#include <dirent.h>
+#include <errno.h>
 
 // TODO: not make this hardcoded
 #define PATH_ROOT 		"/home/test/test"
