@@ -7,7 +7,7 @@ provided by the rootfs by the epic-linux project: https://ftp.machine-hall.org/p
 In later versions this will be extended to a full minimal benchmark framework for `bski` and IA64 benchmarks.
 
 # Status
-Not yet implemented/Under construction.
+WIP under construction, x86_64 tested and (sort of) working
 
 # How to setup the environment
 
@@ -32,7 +32,8 @@ $ ./ski-mitigations-bench # or ./ski-mitigations-bench <N>
 
 ```
 
-The full N=1000 benchmark will take a while (24,5 hours on 5950X setup),
+The full N=1000 benchmark will take a while (estimated ~24,5 hours on 5950X setup,
+~65 hours on my dual xeon E5 2630 V3),
 so during any part of the benchmark running, you can ctrl-c the program and resume any other time.
 
 
@@ -40,33 +41,49 @@ so during any part of the benchmark running, you can ctrl-c the program and resu
 $ ./ski-mitigations-bench --resume
 ```
 
-the program will auto-detect where it left of and the overall simulation time will only be the extra `bski`
+the program will auto-detect where it left off and the overall simulation time will only be the extra `bski`
 startup and the last run will have to be re-done.
 
-# Store tmp files in /tmp
+# Selecting (custom) root dir 
 
-There is another option for ski-mitigations-bench `--tmp`
-
-This will create an artifact folder in /tmp and all the runtime artifact will be stored in tmpfs,
-this is only recommended for small N, as at /tmp will be reset at reboot/shutdown
-
+The base case is this:
 
 ```bash
-$ ./ski-mitigations-bench --tmp
+$ ./ski-mitigations-bench --root .
 ```
 
+This will take the cloned repo dir and create env/ folder.
 
-
-
-
-# Select own root_dir
-
-This option for ski-mitigations-bench `--root <YOUR_ROOT_DIR>`
-
-This will change the benchmark runner to use that root path instead of the default "/home/test/test",
-as of writing.
-
+You can specify any other custom dir (like /tmp for tmpfs, or any other dir)
 
 ```bash
-$ ./ski-mitigations-bench --root <YOUR_ROOT_DIR>
+$ ./ski-mitigations-bench --root <dir>
+```
+
+# Example usage
+
+## 1
+
+Starting the benchmark:
+
+```bash
+$ ./ski-mitigations-bench -n 10 --root . 
+```
+Then after cancelling the benchmark, resuming:
+
+```bash
+$ ./ski-mitigations-bench -n 10 --root . --resume
+```
+
+## 2
+
+```bash
+$ ./ski-mitigations-bench --root .
+```
+
+## 3
+
+```bash
+$ mkdir /tmp/ski-bench
+$ ./ski-mitigations-bench -n 50 --root /tmp/ski-bench
 ```
