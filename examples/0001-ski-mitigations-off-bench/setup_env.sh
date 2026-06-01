@@ -2,9 +2,10 @@
 
 mkdir env && cd env
 
-# TODO: accept the choice of compiling from src
+# TODO: accept the choice of compiling from src and arch selection
+cp ../bin/arch/x86_64/bski .
+
 cp ../bin/vmlinux .
-cp ../bin/bski .
 cp ../bin/ski-bootloader .
 cp ../8192mib-ext4-es-current.img .
 
